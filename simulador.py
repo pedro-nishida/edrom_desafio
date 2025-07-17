@@ -1,9 +1,46 @@
 # SIMULADOR DESAFIO INDIVIDUAL EDROM - 2025
-
+import os
 import pygame
 import sys
 import candidato
 import random
+
+# Função auxiliar para carregar recursos
+def carregar_recurso(nome_arquivo):
+    """
+    Carrega um recurso (arquivo) de forma robusta usando caminhos do OS.
+    Retorna o caminho completo do arquivo.
+    """
+    script_dir = os.path.dirname(os.path.abspath(__file__))
+    return os.path.join(script_dir, nome_arquivo)
+
+def carregar_imagem_com_fallback(nome_arquivo, tamanho_fallback=(40, 40)):
+    """
+    Carrega uma imagem com fallback para uma imagem padrão caso não seja possível carregar.
+    """
+    try:
+        caminho_imagem = carregar_recurso(nome_arquivo)
+        
+        if not os.path.exists(caminho_imagem):
+            raise FileNotFoundError(f"Arquivo não encontrado: {caminho_imagem}")
+        
+        imagem = pygame.image.load(caminho_imagem)
+        return imagem, None  # Sucesso, sem erro
+        
+    except (pygame.error, FileNotFoundError, Exception) as e:
+        print(f"⚠️  Aviso: Não foi possível carregar '{nome_arquivo}': {e}")
+        print(f"📁 Caminho tentado: {caminho_imagem if 'caminho_imagem' in locals() else nome_arquivo}")
+        print(f"📂 Diretório do script: {os.path.dirname(os.path.abspath(__file__))}")
+        
+        # Criar uma imagem padrão
+        imagem_fallback = pygame.Surface(tamanho_fallback, pygame.SRCALPHA)
+        # Desenhar um ícone simples (círculo azul com borda branca)
+        centro = (tamanho_fallback[0] // 2, tamanho_fallback[1] // 2)
+        raio = min(tamanho_fallback) // 2 - 2
+        pygame.draw.circle(imagem_fallback, (0, 120, 200), centro, raio)
+        pygame.draw.circle(imagem_fallback, (255, 255, 255), centro, raio, 2)
+        
+        return imagem_fallback, str(e)  # Retorna imagem padrão e erro
 
 # Configurações
 COR_FUNDO = (20, 80, 40)
@@ -109,13 +146,15 @@ def main():
     clock = pygame.time.Clock()
     fonte_botao = pygame.font.Font(None, 28)
     
-    try:
-        icone_imagem = pygame.image.load("icone_edrom.png")
+    # Carregar ícone com fallback robusto
+    icone_imagem, erro_carregamento = carregar_imagem_com_fallback("icone_edrom.png", (40, 40))
+    
+    # Definir ícone da janela (só funciona se carregou com sucesso)
+    if not erro_carregamento:
         pygame.display.set_icon(icone_imagem)
         icone_painel = pygame.transform.scale(icone_imagem, (40, 40))
-    except pygame.error as e:
-        print(f"Não foi possível carregar a imagem 'icone_edrom.png': {e}")
-        icone_painel = pygame.Surface((40, 40), pygame.SRCALPHA)
+    else:
+        icone_painel = icone_imagem  # Já está no tamanho correto do fallback
     
     botao_play_pause = pygame.Rect(20, ALTURA_TELA - ALTURA_PAINEL + 10, 120, 40)
     botao_reset = pygame.Rect(160, ALTURA_TELA - ALTURA_PAINEL + 10, 120, 40)

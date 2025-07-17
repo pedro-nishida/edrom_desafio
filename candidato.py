@@ -1,6 +1,6 @@
-# NOME DO CANDIDATO: [O candidato deve preencher aqui]
-# CURSO DO CANDIDATO: [Curso]
-# AREAS DE INTERESSE: [Digite Aqui]
+# NOME DO CANDIDATO: Pedro Henrique Fujinami Nishida
+# CURSO DO CANDIDATO: Engenharia da Computação
+# AREAS DE INTERESSE: Visão e Behaviour
 
 # Você pode importar as bibliotecas que julgar necessárias.
 
