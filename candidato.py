@@ -89,9 +89,17 @@ def encontrar_caminho(pos_inicial, pos_objetivo, obstaculos, largura_grid, altur
             # Skip if already explored
             if neighbor_pos in closed_set:
                 continue
-                
-            # Calculate new path cost
-            tentative_g = current_node['g'] + euclidean_distance(current_pos, neighbor_pos)
+            
+            # NOVO: Calcula custo considerando todos os fatores
+            movement_cost = calculate_movement_cost(
+                current_pos=current_pos,
+                next_pos=neighbor_pos,
+                previous_pos=current_node['parent']['position'] if current_node['parent'] else None,
+                tem_bola=tem_bola,
+                obstaculos=obstaculos
+            )
+            
+            tentative_g = current_node['g'] + movement_cost
             
             # Create or update neighbor
             if neighbor_pos not in open_dict:
@@ -111,23 +119,6 @@ def encontrar_caminho(pos_inicial, pos_objetivo, obstaculos, largura_grid, altur
                 neighbor['parent'] = current_node
     
     return []  # No path found
-    # -------------------------------------------------------- #
-
-    #Etapa 1: implementar função de a estrela;
-    #Etapa 2: implementar caminho inicial até a bola, caminho da bola até o gol
-    #Etapa 3: implementar custo de deslocamento
-
-    #Etapa1.1: implementar custo de ação
-
-    #Etapa1.2: implementar custo posse de bola
-
-    #Etapa1.3: implementar zona de perigo
-    #Etapa1.4: implementar custo
-
-
-    # O código abaixo é um EXEMPLO SIMPLES de um robô que apenas anda para frente.
-    # Ele NÃO desvia de obstáculos e NÃO busca o objetivo.
-    # Sua tarefa é substituir esta lógica simples pelo seu algoritmo A* completo.
 
 def create_node(position: Tuple[int, int], g: float = float('inf'), 
                 h: float = 0.0, parent: dict = None) -> dict:
@@ -182,25 +173,129 @@ def reconstruct_path(goal_node: Dict) -> List[Tuple[int,int]]:
 
     return path[::-1]
 
+def calculate_movement_cost(current_pos: Tuple[int, int], next_pos: Tuple[int, int], 
+                          previous_pos: Tuple[int, int] = None, tem_bola: bool = False,
+                          obstaculos: List[Tuple[int, int]] = None) -> float:
+    """
+    Calcula o custo de movimento considerando:
+    - Custo básico de deslocamento (vertical/horizontal vs diagonal)
+    - Custo de rotação baseado na mudança de direção
+    - Multiplicadores para quando tem bola
+    - Zona de perigo próxima a obstáculos
+    """
+    
+    # NÍVEL BÁSICO: Custo base do movimento
+    dx = abs(next_pos[0] - current_pos[0])
+    dy = abs(next_pos[1] - current_pos[1])
+    
+    # Movimento diagonal custa mais que reto
+    if dx == 1 and dy == 1:
+        base_cost = 1.414  # sqrt(2) - custo diagonal
+    else:
+        base_cost = 1.0    # custo vertical/horizontal
+    
+    # NÍVEL 1: Custo de rotação
+    rotation_cost = 0.0
+    if previous_pos is not None:
+        rotation_cost = calculate_rotation_penalty(previous_pos, current_pos, next_pos)
+    
+    # NÍVEL 2: Multiplicador por estado (com bola)
+    state_multiplier = 1.0
+    if tem_bola:
+        state_multiplier = 1.5  # Robô mais cuidadoso com a bola
+        rotation_cost *= 2.0    # Penalidade de rotação ainda maior
+    
+    # NÍVEL 3: Zona de perigo
+    danger_cost = calculate_danger_zone_cost(next_pos, obstaculos) if obstaculos else 0.0
+    
+    total_cost = (base_cost + rotation_cost + danger_cost) * state_multiplier
+    return total_cost
+
+def calculate_rotation_penalty(prev_pos: Tuple[int, int], current_pos: Tuple[int, int], 
+                             next_pos: Tuple[int, int]) -> float:
+    """
+    Calcula a penalidade de rotação baseada na mudança de direção
+    """
+    # Calcula os vetores de direção
+    dir1 = (current_pos[0] - prev_pos[0], current_pos[1] - prev_pos[1])
+    dir2 = (next_pos[0] - current_pos[0], next_pos[1] - current_pos[1])
+    
+    # Se é o primeiro movimento, não há penalidade
+    if dir1 == (0, 0):
+        return 0.0
+    
+    # Calcula o produto escalar para determinar o ângulo
+    dot_product = dir1[0] * dir2[0] + dir1[1] * dir2[1]
+    
+    # Normaliza baseado no tipo de movimento
+    magnitude1 = sqrt(dir1[0]**2 + dir1[1]**2)
+    magnitude2 = sqrt(dir2[0]**2 + dir2[1]**2)
+    
+    if magnitude1 == 0 or magnitude2 == 0:
+        return 0.0
+    
+    cos_angle = dot_product / (magnitude1 * magnitude2)
+    
+    # Penalidades baseadas no ângulo de rotação
+    if cos_angle > 0.9:      # ~0° - movimento reto
+        return 0.0
+    elif cos_angle > 0.7:    # ~45° - curva suave
+        return 0.3
+    elif cos_angle > 0:      # 45°-90° - curva média
+        return 0.6
+    elif cos_angle > -0.7:   # 90°-135° - curva fechada
+        return 1.0
+    else:                    # 135°-180° - inversão de marcha
+        return 2.0
+
+def calculate_danger_zone_cost(position: Tuple[int, int], 
+                              obstaculos: List[Tuple[int, int]]) -> float:
+    """
+    Calcula o custo adicional por estar em zona de perigo (próximo a obstáculos)
+    """
+    if not obstaculos:
+        return 0.0
+    
+    min_distance = float('inf')
+    
+    for obs_pos in obstaculos:
+        distance = euclidean_distance(position, obs_pos)
+        min_distance = min(min_distance, distance)
+    
+    # Zona de perigo: quanto mais próximo do obstáculo, maior o custo
+    if min_distance <= 1.0:        # Adjacente ao obstáculo
+        return 3.0
+    elif min_distance <= 1.414:    # Diagonal do obstáculo
+        return 2.0
+    elif min_distance <= 2.0:      # 2 células de distância
+        return 1.0
+    elif min_distance <= 2.5:      # ~2.5 células de distância
+        return 0.5
+    else:
+        return 0.0
+
+    # -------------------------------------------------------- #
+    # O código abaixo é um EXEMPLO SIMPLES de um robô que apenas anda para frente.
+    # Ele NÃO desvia de obstáculos e NÃO busca o objetivo.
+    # Sua tarefa é substituir esta lógica simples pelo seu algoritmo A* completo.
 
 """
-print("Usando a função de exemplo: robô andando para frente.")
-
-caminho_exemplo = []
-x_atual, y_atual = pos_inicial
-
-# Gera um caminho de até 10 passos para a direita (considerado "frente" no campo)
-for i in range(1, 11):
-    proximo_x = x_atual + i
+    print("Usando a função de exemplo: robô andando para frente.")
     
-    # Garante que o robô não tente andar para fora dos limites do campo
-    if proximo_x < largura_grid:
-        caminho_exemplo.append((proximo_x, y_atual))
-    else:
-        # Para o loop se o robô chegar na borda do campo
-        break
+    caminho_exemplo = []
+    x_atual, y_atual = pos_inicial
 
-# Retorna o caminho
-return caminho_exemplo
+    # Gera um caminho de até 10 passos para a direita (considerado "frente" no campo)
+    for i in range(1, 11):
+        proximo_x = x_atual + i
+        
+        # Garante que o robô não tente andar para fora dos limites do campo
+        if proximo_x < largura_grid:
+            caminho_exemplo.append((proximo_x, y_atual))
+        else:
+            # Para o loop se o robô chegar na borda do campo
+            break
 
+    # Retorna o caminho
+    return caminho_exemplo
 """
