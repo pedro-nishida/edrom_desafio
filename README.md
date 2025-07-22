@@ -292,7 +292,6 @@ python simulador.py
 
 ### **Executar Simulador com Debug:**
 ```bash
-cd .\debug\
 python testbench_sim.py
 ```
 
